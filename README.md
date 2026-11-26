@@ -10,7 +10,7 @@ A low-poly A-10C Thunderbolt II flight sim that runs in the browser. One HTML fi
 - A-10C figures: 16,000 kg gross, 47 m² wing, 17.53 m span, 2 × 40.3 kN TF34-GE-100A with thrust lapse and slow spool-up.
 - Lift curve with stall at 16° AoA, post-stall flat-plate behaviour, nose-down pitch break and wing drop.
 - Stability and damping derivatives for pitch, roll and yaw; sideslip, dihedral effect, adverse yaw.
-- Flaps (UP / MVR / DN), split-aileron speed brakes, landing gear drag, ground effect, light thermal turbulence.
+- Flaps (UP / MVR / DN) with nose-down trim change, drag, and approximate overspeed blow-up (DN above 185 KIAS, MVR above 220); split-aileron speed brakes, landing gear drag, ground effect, light thermal turbulence.
 - Spring-damper landing gear with nosewheel steering (offset right, as on the real jet), wheel brakes, parking brake, runway vs. dirt friction.
 - Field elevation 2,297 ft, standard atmosphere.
 

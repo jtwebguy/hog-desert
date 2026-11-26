@@ -124,7 +124,8 @@ const AC = {
   I: new V3(72000, 95000, 30000),          // body x = pitch, y = yaw, z = roll
   Tmax: 80600,                             // 2 x TF34-GE-100A, sea level static
   CL0: 0.20, CLa: 5.0, aStall: 16 * DEG, aStallNeg: -14 * DEG, dCLflap: 0.5,
-  CD0: 0.045, k: 1 / (Math.PI * 0.8 * (17.53 * 17.53 / 47)), CDgear: 0.022, CDflap: 0.05, CDsb: 0.10,
+  CD0: 0.045, k: 1 / (Math.PI * 0.8 * (17.53 * 17.53 / 47)), CDgear: 0.022, CDflap: 0.075, CDsb: 0.10, CmFlap: -0.03,
+  flapLimDN: 185, flapLimMVR: 220,          // KIAS; above these the flaps are blown back up (approximate)
   Cm0: 0.018, Cma: -0.7, Cmq: -12, CmDe: 0.36,
   Clb: -0.08, Clp: -0.45, Clr: 0.12, Cla: 0.06,
   Cnb: 0.13, Cnr: -0.20, Cnp: -0.04, Cndr: 0.025, Cna: -0.006,
@@ -412,7 +413,7 @@ const RED = new THREE.Color(0xff3020), WHITE = new THREE.Color(0xffffff);
 /* ---------------- State ---------------- */
 const S = {
   pos: new V3(), vel: new V3(), q: new Q4(), w: new V3(),
-  throttle: 0, spool: 0, gearCmd: 1, gearPos: 1, flapIdx: 1, flapPos: 0.35, sbCmd: 0, sbPos: 0,
+  throttle: 0, spool: 0, gearCmd: 1, gearPos: 1, flapIdx: 1, flapPos: 0.35, flapLim: false, sbCmd: 0, sbPos: 0,
   elev: 0, ail: 0, rud: 0, trim: 0, brake: false, parking: true,
   t: 0, alpha: 0, beta: 0, V: 0, rho: 1.2, M: 0, nz: 1, agl: 0, onGround: true, airTime: 0, crashed: false, crashReason: '',
 };
@@ -455,7 +456,11 @@ function crash(reason) {
 function step(h) {
   S.t += h;
   S.gearPos = approach(S.gearPos, S.gearCmd, h / 5);
-  S.flapPos = approach(S.flapPos, FLAPS[S.flapIdx].v, h / 5);
+  const kiasPrev = S.V * Math.sqrt(S.rho / 1.225) * 1.94384;
+  let flapTgt = FLAPS[S.flapIdx].v;
+  if (kiasPrev > AC.flapLimMVR) flapTgt = 0; else if (kiasPrev > AC.flapLimDN) flapTgt = Math.min(flapTgt, FLAPS[1].v);
+  S.flapLim = flapTgt < FLAPS[S.flapIdx].v;
+  S.flapPos = approach(S.flapPos, flapTgt, h / 5);
   S.sbPos = approach(S.sbPos, S.sbCmd, h / 1.5);
   S.spool += (S.throttle - S.spool) * Math.min(1, h / (S.throttle > S.spool ? 2.6 : 1.6));
   S.elev = approach(S.elev, ctl.pitch, h * 3); S.ail = approach(S.ail, ctl.roll, h * 4); S.rud = approach(S.rud, ctl.yaw, h * 3);
@@ -479,9 +484,9 @@ function step(h) {
   CL += AC.dCLflap * S.flapPos * (1 - stallW);
   const hw = Math.max(0.5, agl - 0.45), ge = Math.pow(16 * hw / AC.b, 2), geF = ge / (1 + ge);
   const sa = Math.sin(alpha), sb = Math.sin(beta);
-  const CD = AC.CD0 + AC.k * geF * CL * CL + AC.CDgear * S.gearPos + AC.CDflap * S.flapPos + AC.CDsb * S.sbPos + 1.3 * sa * sa * stallW + 0.5 * sb * sb;
+  const CD = AC.CD0 + AC.k * geF * CL * CL + AC.CDgear * S.gearPos + AC.CDflap * Math.pow(S.flapPos, 1.5) + AC.CDsb * S.sbPos + 1.3 * sa * sa * stallW + 0.5 * sb * sb;
   const CY = AC.CYb * beta + AC.CYdr * S.rud;
-  let Cm = AC.Cm0 + AC.Cma * alpha + AC.Cmq * qh + AC.CmDe * S.elev + S.trim - 0.03 * S.flapPos;
+  let Cm = AC.Cm0 + AC.Cma * alpha + AC.Cmq * qh + AC.CmDe * S.elev + S.trim + AC.CmFlap * S.flapPos;
   const over = Math.max(0, Math.abs(alpha) - (alpha >= 0 ? AC.aStall : -AC.aStallNeg));
   Cm -= 0.9 * over * Math.sign(alpha);
   let Cl = AC.Clb * beta * (1 + 3 * stallW) + AC.Clp * ph * (1 - 0.6 * stallW) + AC.Clr * rh + AC.Cla * S.ail * (1 - 0.5 * stallW);
@@ -772,7 +777,7 @@ function drawHUD() {
   c.textAlign = 'left'; left.forEach((t, i) => c.fillText(t, cx - off - 40 * u, by + i * lh));
   const gearTxt = S.gearPos >= 0.999 ? 'DN' : S.gearPos <= 0.001 ? 'UP' : 'TRANSIT';
   const right = [[`THR ${String(Math.round(S.throttle * 100)).padStart(3)}%`, 0], [`FAN ${String(Math.round(30 + 68 * S.spool)).padStart(3)}%`, 0],
-    [`FLAP ${S.flapPos < 0.01 ? 'UP' : Math.abs(S.flapPos - FLAPS[S.flapIdx].v) > 0.01 ? '··' : FLAPS[S.flapIdx].n}`, 0], [`GEAR ${gearTxt}`, gearTxt === 'TRANSIT' ? 1 : 0],
+    S.flapLim ? [`FLAP ${FLAPS[S.flapIdx].n} BLOWN UP`, 1] : [`FLAP ${S.flapPos < 0.01 ? 'UP' : Math.abs(S.flapPos - FLAPS[S.flapIdx].v) > 0.01 ? '··' : FLAPS[S.flapIdx].n}`, 0], [`GEAR ${gearTxt}`, gearTxt === 'TRANSIT' ? 1 : 0],
     [S.sbPos > 0.01 ? `SPDBRK ${Math.round(S.sbPos * 100)}%` : '', 1], [S.parking ? 'PARK BRK' : S.brake ? 'BRAKES' : '', 1]];
   c.textAlign = 'right';
   right.forEach(([t, w], i) => { if (!t) return; c.fillStyle = w ? WARN : HUDC; c.fillText(t, cx + off + 40 * u, by + i * lh); });
