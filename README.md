@@ -2,7 +2,7 @@
 
 A low-poly A-10C Thunderbolt II flight sim that runs in the browser. One HTML file, Three.js from a CDN, no build step.
 
-**Play:** open `index.html` in a browser, or enable GitHub Pages for this repo and use the Pages link.
+**Play:** https://jtwebguy.github.io/hog-desert/ (or open `index.html` locally).
 
 ## Flight model
 
